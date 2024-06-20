@@ -1,0 +1,50 @@
+name: Build and Deploy Wagtail (prod)
+ 
+on:
+  pull_request:
+    branches:
+      - deploy-test
+jobs:
+  build_and_deploy_prod:
+    runs-on: ubuntu-latest
+    steps:
+     - name: Checkout the repository
+       uses: actions/checkout@v2
+       
+     - name: Get commit SHA
+       run: echo "::set-output name=GIT_COMMIT::$(git rev-parse HEAD --short)"
+       id: get_commit_sha
+
+     - name: Change env
+       run: cp .env.test .env
+        
+     - name: Build APP image
+       run: docker build -t ntvu2/construction-fe-test:${{ steps.get_commit_sha.outputs.GIT_COMMIT }} -f ./Dockerfile .
+       
+     - name: push image to Docker Hub
+       run: |
+          docker login -u ntvu2 -p Vu@291019995789
+          docker push ntvu2/construction-fe-test:${{ steps.get_commit_sha.outputs.GIT_COMMIT }}
+          
+     - name: Deploy server
+       uses: appleboy/ssh-action@master
+       with:
+         host: ${{ secrets.SERVER }}
+         username: ${{ secrets.SERVER_USNAME }}
+         password: ${{ secrets.SERVER_PASSWORD }}
+         script: |
+        
+               # Pull images
+               docker pull ntvu2/construction-fe-test:${{ steps.get_commit_sha.outputs.GIT_COMMIT }}
+
+               # remove container
+               docker rm -f construction-fe-test || true 
+
+               # Run container
+               docker run -d -ti -p 1000:3000 \
+                --restart always \
+                -v /home/docker-data/construction-fe-test/img:/app/assets \
+                --name construction-fe-test ntvu2/construction-fe-test:${{ steps.get_commit_sha.outputs.GIT_COMMIT }}
+              
+       
+         
